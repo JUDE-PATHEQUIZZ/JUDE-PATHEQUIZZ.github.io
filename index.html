@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>PatheQuizz</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: linear-gradient(to bottom right, #000, #002B5B);
+      color: #fff;
+      text-align: center;
+      padding: 20px;
+    }
+    #logo {
+      width: 100px;
+      height: 100px;
+      border-radius: 50%;
+      object-fit: cover;
+      margin-bottom: 20px;
+    }
+    .container { display: none; margin-top: 20px; }
+    input, button, select {
+      padding: 10px;
+      margin: 5px;
+      border: none;
+      border-radius: 10px;
+    }
+    button {
+      background-color: gold;
+      color: #000;
+      cursor: pointer;
+    }
+    button:hover {
+      background-color: orange;
+    }
+    #domainList button {
+      display: block;
+      margin: 10px auto;
+    }
+    .question-block {
+      background: #111;
+      border-radius: 15px;
+      padding: 15px;
+      margin: 10px;
+    }
+  </style>
+</head>
+<body>
+  <img src="Capture d'écran 2025-05-02 185254.png" alt="PatheQuizz Logo" id="logo">
+  <h1>Bienvenue sur PatheQuizz</h1>
+
+  <div id="introContainer">
+    <button onclick="showGuestForm()">Entrer en tant que Guest</button>
+    <button onclick="showAdminLogin()">Connexion Admin</button>
+  </div>
+
+  <div id="loginContainer" class="container">
+    <input type="password" id="adminPassword" placeholder="Mot de passe">
+    <button onclick="loginAdmin()">Connexion</button>
+    <button onclick="goBackToIntro()">Retour</button>
+  </div>
+
+  <div id="adminContainer" class="container">
+    <h2>Admin Panel</h2>
+    <input type="text" id="domainInput" placeholder="Nouveau domaine">
+    <button onclick="addDomain()">Ajouter domaine</button>
+    <div id="domainAdminList"></div>
+    <h3>Scores des joueurs</h3>
+    <div id="scoreList"></div>
+    <button onclick="loadScores()">Actualiser les scores</button>
+    <button onclick="goBackToIntro()">Retour</button>
+  </div>
+
+  <div id="guestContainer" class="container">
+    <h2>Bienvenue <span id="guestNameDisplay"></span><h2>Choisi le domaine et Joue</h2></h2>
+    <div id="domainList"></div>
+    <button onclick="goBackToIntro()">Retour</button>
+  </div>
+
+  <div id="quizContainer" class="container">
+    <h2>Quiz - <span id="quizDomain"></span></h2>
+    <div id="quizGuestName"></div>
+    <div id="quizContainerContent"></div>
+    <div id="result"></div>
+    <button onclick="goBackToIntro()">Retour</button>
+  </div>
+
+  <script>
+    let questionsData = JSON.parse(localStorage.getItem("questionsData")) || {};
+
+    function showGuestForm() {
+      document.getElementById("introContainer").style.display = "none";
+      const guest = prompt("Entrez votre nom");
+      localStorage.setItem("guestName", guest);
+      document.getElementById("guestContainer").style.display = "block";
+      document.getElementById("guestNameDisplay").textContent = guest;
+
+      const domainList = document.getElementById("domainList");
+      domainList.innerHTML = "";
+      Object.keys(questionsData).forEach(domaine => {
+        const btn = document.createElement("button");
+        btn.textContent = domaine;
+        btn.onclick = () => {
+          localStorage.setItem("selectedDomain", domaine);
+          document.getElementById("guestContainer").style.display = "none";
+          document.getElementById("quizContainer").style.display = "block";
+          startQuiz();
+        }
+        domainList.appendChild(btn);
+      });
+    }
+
+    function showAdminLogin() {
+      document.getElementById("introContainer").style.display = "none";
+      document.getElementById("loginContainer").style.display = "block";
+    }
+
+    function loginAdmin() {
+      const password = document.getElementById("adminPassword").value;
+      if (password === "ohayo") {
+        document.getElementById("loginContainer").style.display = "none";
+        document.getElementById("adminContainer").style.display = "block";
+        loadAdminDomains();
+        loadScores();
+      } else {
+        alert("Mot de passe incorrect");
+      }
+    }
+
+    function goBackToIntro() {
+      document.querySelectorAll('.container').forEach(c => c.style.display = 'none');
+      document.getElementById("introContainer").style.display = "block";
+      document.getElementById("domainList").innerHTML = "";
+    }
+
+    function addDomain() {
+      const domain = document.getElementById("domainInput").value.trim();
+      if (!domain) return;
+      if (!questionsData[domain]) questionsData[domain] = [];
+      localStorage.setItem("questionsData", JSON.stringify(questionsData));
+      loadAdminDomains();
+    }
+
+    function loadAdminDomains() {
+      const container = document.getElementById("domainAdminList");
+      container.innerHTML = "";
+      Object.keys(questionsData).forEach(d => {
+        const section = document.createElement("div");
+        section.innerHTML = `
+          <h3>${d} <button onclick="deleteDomain('${d}')">Supprimer</button></h3>
+          <input placeholder="Question" id="q_${d}">
+          <input placeholder="Réponse correcte" id="a_${d}">
+          <input placeholder="Choix séparés par ," id="o_${d}">
+          <input type="number" placeholder="Points" id="p_${d}" value="1">
+          <button onclick="addQuestion('${d}')">Ajouter question</button>
+          <div>${questionsData[d].map((q, i) => `<div class='question-block'>${q.question} - <button onclick="deleteQuestion('${d}', ${i})">Supprimer</button></div>`).join('')}</div>
+        `;
+        container.appendChild(section);
+      });
+    }
+
+    function addQuestion(domain) {
+      const q = document.getElementById(`q_${domain}`).value;
+      const a = document.getElementById(`a_${domain}`).value;
+      const o = document.getElementById(`o_${domain}`).value.split(',');
+      const p = parseInt(document.getElementById(`p_${domain}`).value);
+      questionsData[domain].push({ question: q, answer: a, options: o, points: p });
+      localStorage.setItem("questionsData", JSON.stringify(questionsData));
+      loadAdminDomains();
+    }
+
+    function deleteDomain(domain) {
+      delete questionsData[domain];
+      localStorage.setItem("questionsData", JSON.stringify(questionsData));
+      loadAdminDomains();
+    }
+
+    function deleteQuestion(domain, index) {
+      questionsData[domain].splice(index, 1);
+      localStorage.setItem("questionsData", JSON.stringify(questionsData));
+      loadAdminDomains();
+    }
+
+    function loadScores() {
+      const scores = JSON.parse(localStorage.getItem("quizScores")) || [];
+      const scoreList = document.getElementById("scoreList");
+      scoreList.innerHTML = "";
+      if (scores.length === 0) {
+        scoreList.innerHTML = "<p>Aucun score enregistré.</p>";
+        return;
+      }
+      scores.sort((a, b) => b.score - a.score);
+      scores.forEach(s => {
+        const item = document.createElement("p");
+        item.textContent = `${s.name} - ${s.domain} : ${s.score} points`;
+        scoreList.appendChild(item);
+      });
+    }
+
+    function startQuiz() {
+      const guestName = localStorage.getItem("guestName");
+      const domain = localStorage.getItem("selectedDomain");
+      const questions = questionsData[domain] || [];
+      document.getElementById("quizGuestName").textContent = guestName;
+      document.getElementById("quizDomain").textContent = domain;
+      document.getElementById("quizContainerContent").innerHTML = "";
+      document.getElementById("result").style.display = "none";
+
+      if (questions.length === 0) {
+        document.getElementById("quizContainerContent").innerHTML = "<p>Aucune question disponible pour ce domaine.</p>";
+        return;
+      }
+
+      let score = 0;
+      let current = 0;
+
+      function showQuestion() {
+        if (current >= questions.length) {
+          document.getElementById("quizContainerContent").innerHTML = "";
+          document.getElementById("result").style.display = "block";
+          document.getElementById("result").innerHTML = `<h3>Score final : ${score} points</h3>`;
+
+          let allScores = JSON.parse(localStorage.getItem("quizScores")) || [];
+          allScores.push({ name: guestName, domain: domain, score: score });
+          localStorage.setItem("quizScores", JSON.stringify(allScores));
+          return;
+        }
+
+        const q = questions[current];
+        document.getElementById("quizContainerContent").innerHTML = `
+          <h3>${q.question}</h3>
+          <div>
+            ${q.options.map(opt => `<button onclick="checkAnswer('${opt}')">${opt}</button>`).join('')}
+          </div>
+        `;
+      }
+
+      window.checkAnswer = function (selected) {
+        const q = questions[current];
+        if (selected === q.answer) score += q.points;
+        current++;
+        showQuestion();
+      }
+
+      showQuestion();
+    }
+  </script>
+</body>
+</html>
