@@ -1,29 +1,33 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-  <meta charset="UTF-8">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>PatheQuizz</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <style>
+    * { box-sizing: border-box; }
     body {
-      font-family: Arial, sans-serif;
+      font-family: 'Segoe UI', sans-serif;
       background: linear-gradient(to bottom right, #000, #002B5B);
       color: #fff;
       text-align: center;
       padding: 20px;
+      margin: 0;
     }
-    #logo {
+    img#logo {
       width: 100px;
       height: 100px;
       border-radius: 50%;
       object-fit: cover;
       margin-bottom: 20px;
     }
-    .container { display: none; margin-top: 20px; }
     input, button, select {
       padding: 10px;
       margin: 5px;
       border: none;
       border-radius: 10px;
+      font-size: 1em;
     }
     button {
       background-color: gold;
@@ -33,6 +37,11 @@
     button:hover {
       background-color: orange;
     }
+    .container {
+      display: none;
+      max-width: 800px;
+      margin: auto;
+    }
     #domainList button {
       display: block;
       margin: 10px auto;
@@ -41,17 +50,22 @@
       background: #111;
       border-radius: 15px;
       padding: 15px;
-      margin: 10px;
+      margin: 10px 0;
+    }
+    @media (max-width: 600px) {
+      input, button {
+        width: 90%;
+      }
     }
   </style>
 </head>
 <body>
-  <img src="Capture d'écran 2025-05-02 185254.png" alt="PatheQuizz Logo" id="logo">
+  <img src="logo.png" alt="PatheQuizz Logo" id="logo">
   <h1>Bienvenue sur PatheQuizz</h1>
 
   <div id="introContainer">
-    <button onclick="showGuestForm()">Entrer en tant que Guest</button>
-    <button onclick="showAdminLogin()">Connexion Admin</button>
+    <button onclick="showGuestForm()">Guest</button>
+    <button onclick="showAdminLogin()">Admin</button>
   </div>
 
   <div id="loginContainer" class="container">
@@ -67,12 +81,17 @@
     <div id="domainAdminList"></div>
     <h3>Scores des joueurs</h3>
     <div id="scoreList"></div>
-    <button onclick="loadScores()">Actualiser les scores</button>
+    <button onclick="loadScores()">Actualiser</button>
+    <button onclick="generatePDF()">📄 Générer PDF</button>
+    <h3>Erreurs signalées</h3>
+    <div id="feedbackList"></div>
+    <button onclick="loadFeedback()">Afficher messages</button>
     <button onclick="goBackToIntro()">Retour</button>
   </div>
 
   <div id="guestContainer" class="container">
-    <h2>Bienvenue <span id="guestNameDisplay"></span><h2>Choisi le domaine et Joue</h2></h2>
+    <h2>Bienvenue <span id="guestNameDisplay"></span> !</h2>
+    <h3>Choisis un domaine pour commencer</h3>
     <div id="domainList"></div>
     <button onclick="goBackToIntro()">Retour</button>
   </div>
@@ -82,32 +101,26 @@
     <div id="quizGuestName"></div>
     <div id="quizContainerContent"></div>
     <div id="result"></div>
+    <div id="feedbackForm" style="display:none">
+      <textarea id="feedbackText" placeholder="Signale une erreur ici..." rows="3" style="width:90%; margin:10px auto;"></textarea>
+      <br>
+      <button onclick="submitFeedback()">Envoyer</button>
+    </div>
     <button onclick="goBackToIntro()">Retour</button>
   </div>
 
   <script>
     let questionsData = JSON.parse(localStorage.getItem("questionsData")) || {};
+    let feedbackData = JSON.parse(localStorage.getItem("feedbackData")) || [];
 
     function showGuestForm() {
       document.getElementById("introContainer").style.display = "none";
       const guest = prompt("Entrez votre nom");
+      if (!guest) return goBackToIntro();
       localStorage.setItem("guestName", guest);
-      document.getElementById("guestContainer").style.display = "block";
       document.getElementById("guestNameDisplay").textContent = guest;
-
-      const domainList = document.getElementById("domainList");
-      domainList.innerHTML = "";
-      Object.keys(questionsData).forEach(domaine => {
-        const btn = document.createElement("button");
-        btn.textContent = domaine;
-        btn.onclick = () => {
-          localStorage.setItem("selectedDomain", domaine);
-          document.getElementById("guestContainer").style.display = "none";
-          document.getElementById("quizContainer").style.display = "block";
-          startQuiz();
-        }
-        domainList.appendChild(btn);
-      });
+      document.getElementById("guestContainer").style.display = "block";
+      loadDomainsForGuest();
     }
 
     function showAdminLogin() {
@@ -116,27 +129,25 @@
     }
 
     function loginAdmin() {
-      const password = document.getElementById("adminPassword").value;
-      if (password === "ohayo") {
+      const pass = document.getElementById("adminPassword").value;
+      if (pass === "ohayo") {
         document.getElementById("loginContainer").style.display = "none";
         document.getElementById("adminContainer").style.display = "block";
         loadAdminDomains();
         loadScores();
-      } else {
-        alert("Mot de passe incorrect");
-      }
+        loadFeedback();
+      } else alert("Mot de passe incorrect");
     }
 
     function goBackToIntro() {
-      document.querySelectorAll('.container').forEach(c => c.style.display = 'none');
+      document.querySelectorAll('.container').forEach(e => e.style.display = 'none');
       document.getElementById("introContainer").style.display = "block";
-      document.getElementById("domainList").innerHTML = "";
     }
 
     function addDomain() {
-      const domain = document.getElementById("domainInput").value.trim();
-      if (!domain) return;
-      if (!questionsData[domain]) questionsData[domain] = [];
+      const dom = document.getElementById("domainInput").value.trim();
+      if (!dom) return;
+      if (!questionsData[dom]) questionsData[dom] = [];
       localStorage.setItem("questionsData", JSON.stringify(questionsData));
       loadAdminDomains();
     }
@@ -147,13 +158,18 @@
       Object.keys(questionsData).forEach(d => {
         const section = document.createElement("div");
         section.innerHTML = `
-          <h3>${d} <button onclick="deleteDomain('${d}')">Supprimer</button></h3>
-          <input placeholder="Question" id="q_${d}">
-          <input placeholder="Réponse correcte" id="a_${d}">
-          <input placeholder="Choix séparés par ," id="o_${d}">
-          <input type="number" placeholder="Points" id="p_${d}" value="1">
-          <button onclick="addQuestion('${d}')">Ajouter question</button>
-          <div>${questionsData[d].map((q, i) => `<div class='question-block'>${q.question} - <button onclick="deleteQuestion('${d}', ${i})">Supprimer</button></div>`).join('')}</div>
+          <h3>${d} <button onclick="deleteDomain('${d}')">❌</button></h3>
+          <input id="q_${d}" placeholder="Question">
+          <input id="a_${d}" placeholder="Réponse correcte">
+          <input id="o_${d}" placeholder="Choix séparés par ,">
+          <input type="number" id="p_${d}" placeholder="Points" value="1">
+          <input type="number" id="t_${d}" placeholder="Temps en sec" value="10">
+          <button onclick="addQuestion('${d}')">Ajouter</button>
+          ${questionsData[d].map((q, i) => `
+            <div class="question-block">
+              Q: ${q.question}<br>
+              <button onclick="deleteQuestion('${d}', ${i})">Supprimer</button>
+            </div>`).join('')}
         `;
         container.appendChild(section);
       });
@@ -162,9 +178,11 @@
     function addQuestion(domain) {
       const q = document.getElementById(`q_${domain}`).value;
       const a = document.getElementById(`a_${domain}`).value;
-      const o = document.getElementById(`o_${domain}`).value.split(',');
+      const o = document.getElementById(`o_${domain}`).value.split(',').map(e => e.trim());
       const p = parseInt(document.getElementById(`p_${domain}`).value);
-      questionsData[domain].push({ question: q, answer: a, options: o, points: p });
+      const t = parseInt(document.getElementById(`t_${domain}`).value);
+      if (!q || !a || o.length < 2) return alert("Complète la question");
+      questionsData[domain].push({ question: q, answer: a, options: o, points: p, time: t });
       localStorage.setItem("questionsData", JSON.stringify(questionsData));
       loadAdminDomains();
     }
@@ -181,68 +199,106 @@
       loadAdminDomains();
     }
 
-    function loadScores() {
-      const scores = JSON.parse(localStorage.getItem("quizScores")) || [];
-      const scoreList = document.getElementById("scoreList");
-      scoreList.innerHTML = "";
-      if (scores.length === 0) {
-        scoreList.innerHTML = "<p>Aucun score enregistré.</p>";
-        return;
-      }
-      scores.sort((a, b) => b.score - a.score);
-      scores.forEach(s => {
-        const item = document.createElement("p");
-        item.textContent = `${s.name} - ${s.domain} : ${s.score} points`;
-        scoreList.appendChild(item);
+    function loadDomainsForGuest() {
+      const list = document.getElementById("domainList");
+      list.innerHTML = "";
+      Object.keys(questionsData).forEach(d => {
+        const btn = document.createElement("button");
+        btn.textContent = d;
+        btn.onclick = () => {
+          localStorage.setItem("selectedDomain", d);
+          document.getElementById("guestContainer").style.display = "none";
+          document.getElementById("quizContainer").style.display = "block";
+          startQuiz();
+        };
+        list.appendChild(btn);
       });
     }
 
     function startQuiz() {
-      const guestName = localStorage.getItem("guestName");
+      const name = localStorage.getItem("guestName");
       const domain = localStorage.getItem("selectedDomain");
       const questions = questionsData[domain] || [];
-      document.getElementById("quizGuestName").textContent = guestName;
+      const display = document.getElementById("quizContainerContent");
       document.getElementById("quizDomain").textContent = domain;
-      document.getElementById("quizContainerContent").innerHTML = "";
-      document.getElementById("result").style.display = "none";
-
-      if (questions.length === 0) {
-        document.getElementById("quizContainerContent").innerHTML = "<p>Aucune question disponible pour ce domaine.</p>";
-        return;
-      }
-
-      let score = 0;
-      let current = 0;
+      document.getElementById("quizGuestName").textContent = name;
+      let score = 0, current = 0;
 
       function showQuestion() {
         if (current >= questions.length) {
-          document.getElementById("quizContainerContent").innerHTML = "";
-          document.getElementById("result").style.display = "block";
+          display.innerHTML = "";
           document.getElementById("result").innerHTML = `<h3>Score final : ${score} points</h3>`;
-
+          document.getElementById("result").style.display = "block";
+          document.getElementById("feedbackForm").style.display = "block";
           let allScores = JSON.parse(localStorage.getItem("quizScores")) || [];
-          allScores.push({ name: guestName, domain: domain, score: score });
+          allScores.push({ name: name, domain: domain, score: score });
           localStorage.setItem("quizScores", JSON.stringify(allScores));
           return;
         }
 
         const q = questions[current];
-        document.getElementById("quizContainerContent").innerHTML = `
+        let timeLeft = q.time || 10;
+        display.innerHTML = `
           <h3>${q.question}</h3>
-          <div>
-            ${q.options.map(opt => `<button onclick="checkAnswer('${opt}')">${opt}</button>`).join('')}
-          </div>
+          <div id="options">${q.options.map(o => `<button onclick="selectAnswer('${o}')">${o}</button>`).join("")}</div>
+          <p>Temps restant : <span id="timer">${timeLeft}</span>s</p>
         `;
-      }
 
-      window.checkAnswer = function (selected) {
-        const q = questions[current];
-        if (selected === q.answer) score += q.points;
-        current++;
-        showQuestion();
+        const timer = setInterval(() => {
+          if (--timeLeft <= 0) {
+            clearInterval(timer);
+            current++;
+            showQuestion();
+          }
+          document.getElementById("timer").textContent = timeLeft;
+        }, 1000);
+
+        window.selectAnswer = (rep) => {
+          clearInterval(timer);
+          if (rep === q.answer) score += q.points;
+          current++;
+          showQuestion();
+        }
       }
 
       showQuestion();
+    }
+
+    function loadScores() {
+      const scores = JSON.parse(localStorage.getItem("quizScores")) || [];
+      scores.sort((a, b) => b.score - a.score);
+      document.getElementById("scoreList").innerHTML = scores.map(s =>
+        `<p>${s.name} (${s.domain}) : ${s.score} pts</p>`).join('');
+    }
+
+    function generatePDF() {
+      const scores = JSON.parse(localStorage.getItem("quizScores")) || [];
+      const { jsPDF } = window.jspdf;
+      const doc = new jsPDF();
+      doc.setFontSize(20);
+      doc.text("Classement PatheQuizz", 20, 20);
+      doc.setFontSize(12);
+      scores.sort((a, b) => b.score - a.score);
+      scores.forEach((s, i) => {
+        doc.text(`${i + 1}. ${s.name} (${s.domain}) - ${s.score} pts`, 20, 40 + i * 10);
+      });
+      doc.save("Classement_PatheQuizz.pdf");
+    }
+
+    function submitFeedback() {
+      const name = localStorage.getItem("guestName");
+      const msg = document.getElementById("feedbackText").value.trim();
+      if (!msg) return;
+      feedbackData.push({ name, msg });
+      localStorage.setItem("feedbackData", JSON.stringify(feedbackData));
+      alert("Merci pour ton message !");
+      document.getElementById("feedbackText").value = "";
+      document.getElementById("feedbackForm").style.display = "none";
+    }
+
+    function loadFeedback() {
+      const container = document.getElementById("feedbackList");
+      container.innerHTML = feedbackData.map(f => `<p><strong>${f.name}:</strong> ${f.msg}</p>`).join('');
     }
   </script>
 </body>
